@@ -10,9 +10,10 @@ import numpy as np
 class HMM:
     def __init__(self, M, V):
         """
-
+        Hidden Markov Model for Discrete Data
         Parameters:
         m - the number of hidden states
+        v - the number of observed states
 
         """
 
@@ -202,12 +203,33 @@ class HMM:
     def viterbi(self,x):
         """
         Viterbi algorithm
-        returns the most likely state sequence given observed sequence x
+        Calculate the most likely hidden state sequence given observed sequence x
+        δ : delta
+        ψ : psai
 
         Parameter:
         x -  observed sequence
         Return:
-        states - state sequence
+        states - most likely hidden state sequence
         """
-        pass
+        T = x.shape[0]
 
+        # Step 1: initialize delta and psai
+        delta = np.zeros((T,self.M))
+        delta[0] = self.pi * self.B[:, x[0]]
+
+        psai  = np.zeros((T,self.M))
+
+        # Step 2: update delta and psai
+        for t in range(1, T):
+            for j in range(self.M):
+                delta[t,j] = np.max(delta[t-1]*self.A[:,j]) * self.B[j, x[t]]
+                psai[t,j] = np.argmax(delta[t-1]*self.A[:,j])
+
+        # Step 3: backtrack
+        states = np.zeros(T)
+        states[T-1] = np.argmax(delta[T-1])
+        for t in range(T-2, -1, -1):
+            states[t] = psai[t+1,states[t+1]]
+
+        return states
