@@ -69,6 +69,65 @@ class HMM:
 
         return beta
 
+    def calc_gamma_per_element(self, t, i, alpha, beta):
+        """
+        calculate probability of state qi at time t given model λ and  observed  sequence x
+        γ_t(i) = p(i_t = q_i | x, λ)
+
+        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V
+        Parameters:
+        x - observed sequence
+        alpha - forward probability
+        beta - backward probability
+        Returns:
+        γ
+        """
+        gamma_numerator = alpha[t,i]*beta[t,i]
+        gamma_denominator = alpha[-1].sum()
+
+        return gamma_numerator/gamma_denominator
+
+    def calc_gamma(self, t, i, alpha, beta):
+        """
+        calculate probability of state qi at time t given model λ and  observed  sequence x
+        γ_t(i) = p(i_t = q_i | x, λ)
+
+        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V
+        Parameters:
+        x - observed sequence
+        alpha - forward probability
+        beta - backward probability
+        Returns:
+        γ
+        """
+
+        gamma_numerator = alpha * beta
+        gamma_denominator = alpha[-1].sum()
+
+        return gamma_numerator/gamma_denominator
+
+    def calc_ksi(self, x, alpha, beta):
+        """
+        calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
+        ξ_t(i,j) = p(i_t = q_i, t_t+1 = q_j  | x, λ)
+        Parameters:
+        x - observed sequence
+        alpha - forward probability
+        beta - backward probability
+        Returns:
+        ξ
+        """
+        T = alpha.shape[0]
+
+        ksi_numerator = np.zeros((T,self.M,self.M))
+        ksi_denominator = alpha[-1].sum()
+        for t in range(T):
+            for i in range(self.M):
+                for j in range(self.M):
+                    ksi_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
+
+        return ksi_numerator/ksi_denominator
+
     def viterbi(self,x):
         """
         Viterbi algorithm
@@ -81,25 +140,6 @@ class HMM:
         """
         pass
 
-    def calc_gamma(self):
-        """
-        calculate probability of state qi at time t given model λ and  observed  sequence x
-        γ_t(i) = p(i_t = q_i | x, λ)
-        Parameters:
-
-        Returns:
-        """
-        pass
-
-    def calc_ksi(self):
-        """
-        calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
-        ξ_t(i,j) = p(i_t = q_i, t_t+1 = q_j  | x, λ)
-        Parameters:
-
-        Returns:
-        """
-
     def fit(self, X, max_iter=10):
         """
         train  HMM  using the Baum-Welch algorithm
@@ -109,4 +149,4 @@ class HMM:
         X - array of observed sequence
         max_iter - max iteration of training
         """
-        pass
+
