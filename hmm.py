@@ -87,7 +87,7 @@ class HMM:
 
         return gamma_numerator/gamma_denominator
 
-    def calc_gamma(self, t, i, alpha, beta):
+    def calc_gamma(self, alpha, beta):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ)
