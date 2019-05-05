@@ -3,6 +3,7 @@
 # Time      : 2019-05-05 10:37
 # FileName  : hmm.py
 
+import time
 import numpy as np
 
 
@@ -80,7 +81,7 @@ class HMM:
         alpha - forward probability
         beta - backward probability
         Returns:
-        γ
+        γ_t(i)
         """
         gamma_numerator = alpha[t,i]*beta[t,i]
         gamma_denominator = alpha[-1].sum()
@@ -121,12 +122,82 @@ class HMM:
 
         ksi_numerator = np.zeros((T,self.M,self.M))
         ksi_denominator = alpha[-1].sum()
-        for t in range(T):
+        for t in range(T-1):
             for i in range(self.M):
                 for j in range(self.M):
                     ksi_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
 
         return ksi_numerator/ksi_denominator
+
+    def fit(self, X, max_iter=10):
+        """
+        train  HMM  using the Baum-Welch algorithm
+        a specific instance of the expectation-maximization algorithm
+
+        Parameters:
+        X - array of observed sequence
+        max_iter - max iteration of training
+        """
+        begin_time = time.time()
+
+        n_samples,T = X.shape[0],X.shape[1]
+
+        costs = []
+        P = np.zeros((n_samples,1)) # probability of observed sequence P(X[i]|λ)
+
+        for i_iter in range(max_iter):
+
+            # Step 1
+            # forward and backward
+            alphas, betas = [], []
+            for i_sample in range(n_samples):
+                alpha = self.forward(X[i_sample]) # T * M
+                beta = self.backward(X[i_sample]) # T * M
+                alphas.append(alpha)
+                betas.append(beta)
+                P[i_sample] = alpha[-1].sum()
+
+            # record costs
+            costs.append(np.sum(np.log(P)))
+
+            # Step 2
+            # re-estimate pi, A, B
+
+            # Step 2.1 re-estimate pi (mean value)
+            self.pi =  np.sum((alphas[i_sample][0] * betas[i_sample][0])/P[i_sample]  \
+                                for i_sample in range(n_samples)) / n_samples
+
+            # Step 2.2 re-estimate A, B
+            tmp_A, tmp_B = [],[]
+            for i_sample in range(n_samples):
+                # Step 2.2.1  update A
+                a_ksi = self.calc_ksi(X[i_sample], alphas[i_sample],betas[i_sample]) # T-1 * M * M
+                a_gamma  = self.calc_gamma(alphas[i_sample][:-1],betas[i_sample][:-1]) # T-1 * M
+
+                A_numerator = np.sum(a_ksi, axis=0) # M*M
+                A_denominator = np.sum(a_gamma, axis=0) # M*1
+                tmp_A.append(A_numerator/A_denominator)
+
+                # Step 2.2.1  update B
+                B_numerator = np.zeros((self.M,self.V)) # M * V
+                for j in range(self.M):
+                    for k in range(self.V):
+                        B_gamma_numerator = 0
+                        for t in range(T):
+                            if X[i_sample][t] == k:
+                                B_gamma_numerator += self.calc_gamma_per_element(t,j,
+                                                                                 alphas[i_sample],betas[i_sample])
+                        B_numerator[j,k] = B_gamma_numerator
+
+                b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample]) # T * M
+                B_denominator = np.sum(b_gamma, axis=0)  # M*1
+                tmp_B.append(B_numerator / B_denominator) # M*V
+
+            self.A = np.mean(tmp_A,axis=0) # M*M
+            self.B = np.mean(tmp_B, axis=0)  # M*V
+
+        end_time = time.time()
+        print('Fit duration: ', end_time - begin_time)
 
     def viterbi(self,x):
         """
@@ -139,14 +210,4 @@ class HMM:
         states - state sequence
         """
         pass
-
-    def fit(self, X, max_iter=10):
-        """
-        train  HMM  using the Baum-Welch algorithm
-        a specific instance of the expectation-maximization algorithm
-
-        Parameters:
-        X - array of observed sequence
-        max_iter - max iteration of training
-        """
 
