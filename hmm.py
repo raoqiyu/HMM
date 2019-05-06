@@ -227,7 +227,7 @@ class HMM:
                 psai[t,j] = np.argmax(delta[t-1]*self.A[:,j])
 
         # Step 3: backtrack
-        states = np.zeros(T)
+        states = np.zeros(T,dtype=np.int)
         states[T-1] = np.argmax(delta[T-1])
         for t in range(T-2, -1, -1):
             states[t] = psai[t+1,states[t+1]]
