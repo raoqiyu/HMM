@@ -178,7 +178,7 @@ class HMM:
                 a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], updateA=True) # T-1 * M
 
                 A_numerator = np.sum(a_psai, axis=0) # M*M
-                A_denominator = np.sum(a_gamma, axis=0) # M*1
+                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T # M*1
                 tmp_A.append(A_numerator/A_denominator)
 
                 # Step 2.2.1  update B
@@ -193,7 +193,7 @@ class HMM:
                         B_numerator[j,k] = B_gamma_numerator
 
                 b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample]) # T * M
-                B_denominator = np.sum(b_gamma, axis=0)  # M*1
+                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T  # M*1
                 tmp_B.append(B_numerator / B_denominator) # M*V
 
             self.A = np.mean(tmp_A,axis=0) # M*M
