@@ -243,3 +243,43 @@ class HMM:
 
     def log_likelihood(self,X):
         return np.log(np.array([self.forward(x)[-1].sum() for x in X]))
+
+    def generate(self, length, k=3):
+        """
+        Generate a observed sequence using a trained model
+
+        Parameter:
+        length - the length of the observed sequence
+
+        Returns:
+        observed_states - the observed sequence
+        """
+        #
+        def reject_sampling(probs):
+            stop = False
+            while not stop:
+                z = np.random.uniform(0, 1)
+                u = np.random.uniform(0, k * z)
+                i_sample = np.random.choice(probs.shape[0], p=probs)
+                pz = probs[i_sample]
+                if pz >= u:
+                    stop = True
+            return i_sample
+
+        hidden_states = []
+
+        # generate hidden state sequence
+        hidden_states.append(reject_sampling(self.pi))
+        for i in range(1, length):
+            previous_hidden_state = hidden_states[-1]
+            hidden_state = reject_sampling(self.A[previous_hidden_state])
+            hidden_states.append(hidden_state)
+
+        # generate observed state sequence
+        observed_states = []
+        for i in range(length):
+            hidden_state = hidden_states[i]
+            observed_state = reject_sampling(self.B[hidden_state])
+            observed_states.append(observed_state)
+
+        return observed_states
