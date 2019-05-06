@@ -76,7 +76,7 @@ class HMM:
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ)
 
-        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V
+        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -85,16 +85,17 @@ class HMM:
         γ_t(i)
         """
         gamma_numerator = alpha[t,i]*beta[t,i]
-        gamma_denominator = alpha[-1].sum()
-
-        return gamma_numerator/gamma_denominator
+        return  gamma_numerator
+        # gamma_denominator = alpha[-1].sum()
+        #
+        # return gamma_numerator/gamma_denominator
 
     def calc_gamma(self, alpha, beta, updateA=False):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ)
 
-        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V
+        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -106,14 +107,17 @@ class HMM:
             gamma_numerator = alpha[:-1] * beta[:-1]
         else:
             gamma_numerator = alpha * beta
-        gamma_denominator = alpha[-1].sum()
-
-        return gamma_numerator/gamma_denominator
+        return gamma_numerator
+        # gamma_denominator = alpha[-1].sum()
+        #
+        # return gamma_numerator/gamma_denominator
 
     def calc_psai(self, x, alpha, beta):
         """
         calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
         ξ_t(i,j) = p(i_t = q_i, t_t+1 = q_j  | x, λ)
+
+        Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -124,13 +128,13 @@ class HMM:
         T = alpha.shape[0]
 
         psai_numerator = np.zeros((T,self.M,self.M))
-        psai_denominator = alpha[-1].sum()
+        # psai_denominator = alpha[-1].sum()
         for t in range(T-1):
             for i in range(self.M):
                 for j in range(self.M):
                     psai_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
-
-        return psai_numerator/psai_denominator
+        return psai_numerator
+        # return psai_numerator/psai_denominator
 
     def fit(self, X, max_iter=10):
         """
@@ -158,6 +162,7 @@ class HMM:
                 beta = self.backward(X[i_sample]) # T * M
                 alphas.append(alpha)
                 betas.append(beta)
+                # P[i_sample] is P(O|λ) when calculate gamma and psai
                 P[i_sample] = alpha[-1].sum()
 
             # record costs
@@ -177,8 +182,8 @@ class HMM:
                 a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
                 a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], updateA=True) # T-1 * M
 
-                A_numerator = np.sum(a_psai, axis=0) # M*M
-                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T # M*1
+                A_numerator = np.sum(a_psai, axis=0)/P[i_sample] # M*M
+                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T/P[i_sample] # M*1
                 tmp_A.append(A_numerator/A_denominator)
 
                 # Step 2.2.1  update B
@@ -190,10 +195,10 @@ class HMM:
                             if X[i_sample][t] == k:
                                 B_gamma_numerator += self.calc_gamma_per_element(t,j,
                                                                                  alphas[i_sample],betas[i_sample])
-                        B_numerator[j,k] = B_gamma_numerator
+                        B_numerator[j,k] = B_gamma_numerator/P[i_sample]
 
                 b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample]) # T * M
-                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T  # M*1
+                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T/P[i_sample]  # M*1
                 tmp_B.append(B_numerator / B_denominator) # M*V
 
             self.A = np.mean(tmp_A,axis=0) # M*M
