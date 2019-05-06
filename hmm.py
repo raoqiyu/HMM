@@ -108,7 +108,7 @@ class HMM:
 
         return gamma_numerator/gamma_denominator
 
-    def calc_ksi(self, x, alpha, beta):
+    def calc_psai(self, x, alpha, beta):
         """
         calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
         ξ_t(i,j) = p(i_t = q_i, t_t+1 = q_j  | x, λ)
@@ -121,14 +121,14 @@ class HMM:
         """
         T = alpha.shape[0]
 
-        ksi_numerator = np.zeros((T,self.M,self.M))
-        ksi_denominator = alpha[-1].sum()
+        psai_numerator = np.zeros((T,self.M,self.M))
+        psai_denominator = alpha[-1].sum()
         for t in range(T-1):
             for i in range(self.M):
                 for j in range(self.M):
-                    ksi_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
+                    psai_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
 
-        return ksi_numerator/ksi_denominator
+        return psai_numerator/psai_denominator
 
     def fit(self, X, max_iter=10):
         """
@@ -172,10 +172,10 @@ class HMM:
             tmp_A, tmp_B = [],[]
             for i_sample in range(n_samples):
                 # Step 2.2.1  update A
-                a_ksi = self.calc_ksi(X[i_sample], alphas[i_sample],betas[i_sample]) # T-1 * M * M
+                a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
                 a_gamma  = self.calc_gamma(alphas[i_sample][:-1],betas[i_sample][:-1]) # T-1 * M
 
-                A_numerator = np.sum(a_ksi, axis=0) # M*M
+                A_numerator = np.sum(a_psai, axis=0) # M*M
                 A_denominator = np.sum(a_gamma, axis=0) # M*1
                 tmp_A.append(A_numerator/A_denominator)
 
