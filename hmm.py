@@ -89,7 +89,7 @@ class HMM:
 
         return gamma_numerator/gamma_denominator
 
-    def calc_gamma(self, alpha, beta):
+    def calc_gamma(self, alpha, beta, updateA=False):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ)
@@ -102,8 +102,10 @@ class HMM:
         Returns:
         γ
         """
-
-        gamma_numerator = alpha * beta
+        if updateA:
+            gamma_numerator = alpha[:-1] * beta[:-1]
+        else:
+            gamma_numerator = alpha * beta
         gamma_denominator = alpha[-1].sum()
 
         return gamma_numerator/gamma_denominator
@@ -173,7 +175,7 @@ class HMM:
             for i_sample in range(n_samples):
                 # Step 2.2.1  update A
                 a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
-                a_gamma  = self.calc_gamma(alphas[i_sample][:-1],betas[i_sample][:-1]) # T-1 * M
+                a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], updateA=True) # T-1 * M
 
                 A_numerator = np.sum(a_psai, axis=0) # M*M
                 A_denominator = np.sum(a_gamma, axis=0) # M*1
