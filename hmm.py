@@ -5,7 +5,7 @@
 
 import time
 import numpy as np
-
+np.random.seed(1024)
 
 class HMM:
     def __init__(self, M, V):
