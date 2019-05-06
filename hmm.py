@@ -67,7 +67,7 @@ class HMM:
         beta = np.zeros((T,self.M))
         beta[-1] = 1
         for t in range(T-2,-1,-1):
-            beta[t] = self.A.dot(self.B[:,x[t]]) * beta[t+1]
+            beta[t] = self.A.dot(self.B[:,x[t+1]] * beta[t+1])
 
         return beta
 
