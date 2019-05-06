@@ -233,3 +233,6 @@ class HMM:
             states[t] = psai[t+1,states[t+1]]
 
         return states
+
+    def log_likelihood(self,X):
+        return np.log(np.array([self.forward(x)[-1].sum() for x in X]))
