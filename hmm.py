@@ -5,6 +5,7 @@
 
 import time
 import numpy as np
+from functools import reduce
 np.random.seed(1024)
 
 from utils.sampling import reject_sampling, random_sampling
@@ -18,7 +19,6 @@ class HMM:
         v - the number of observed states
 
         """
-
         self.M = M
         self.V = V
 
@@ -37,6 +37,11 @@ class HMM:
             at time t is qi given model λ
         α_t(i) = P(x1,x2,...xt,i_t=q_i | λ)
 
+        scaled version:
+        α_t(i) = P(x1,x2,...xt) * p(i_t=q_i |x1,x2,...x_t,  λ) = scaled_factor * scaled_of_α_t(i)
+            scaled factor: P(x1,x2,...x_t) = sum(α_t(i)), i =1,2,3,...M
+            scaled α_t: p(i_t=q_i |x1,x2,...xt,  λ)
+                scaled α_t = α_t / scaled_factor
 
         Parameters:
         x - observed sequence, np.array, T*1
@@ -46,18 +51,41 @@ class HMM:
         T = x.shape[0]
 
         alpha = np.zeros((x.shape[0],self.M))
+        scale = np.zeros((x.shape[0],1))
         alpha[0] = self.pi*self.B[:,x[0]]
+        scale[0] = 1/alpha[0].sum()
+        alpha[0] *= scale[0]
         for t in range(1,T):
             alpha[t] = alpha[t-1].dot(self.A) * self.B[:,x[t]]
+            scale[t] = 1/alpha[t].sum()
+            alpha[t] *= scale[t]
 
-        return alpha
+        return alpha, scale
 
-    def backward(self, x):
+    def backward(self, x, scale=None):
         """
         the backward part of the forward-backward algorithm
         calculate backward probability: the probability of the observed sequence from time t+1 to T is
             (x_t+1,x_t+2,...,x_T) given state is qi at time t and the model λ
-        α_t(i) = P(x_t+1,x_t+2,...x_T|λ, i_t=q_i )
+        β_t(i) = P(x_t+1,x_t+2,...x_T|λ, i_t=q_i )
+
+
+        scaled version:
+        P(O|λ) = sum(α_t(i) * A[i,j] * B[j, Ot] * β_t=1(i)), i = 1,2,..,M, j = 1,2,...,M
+               = sum(scaled_α_t(i) * A[i,j] * B[j, Ot] * scaled_β_t+1(i)),
+               = sum( α_t(i)/scaled_factor_ α_t * A[i,j] * B[j, Ot] * β_t+1(i)*scale_factor_β_t+1 )
+
+        so,
+            scaled_factor_ α_t == scale_factor_β_t+1
+
+
+        β_t(i) = scaled_of_α_t(i) / scaled_factor
+
+        β_t(i) = P(x_t+1,x_t+2,...x_T|λ,x1,x2,...,xt,i_t=q_i ) * p(x1,x2,...,xt)
+               = scaled_factor * scaled_of_β_t(i)
+            scaled factor: P(x1,x2,...xt) = sum(α_t(i)), i =1,2,3,...M
+            scaled α_t: p(i_t=q_i |x1,x2,...xt,  λ)
+            scaled α_t = α_t / scaled_factor
 
         Parameters:
         x - observed sequence
@@ -67,9 +95,9 @@ class HMM:
         T = x.shape[0]
 
         beta = np.zeros((T,self.M))
-        beta[-1] = 1
+        beta[-1] = 1*scale[-1]
         for t in range(T-2,-1,-1):
-            beta[t] = self.A.dot(self.B[:,x[t+1]] * beta[t+1])
+            beta[t] = self.A.dot(self.B[:,x[t+1]] * beta[t+1])*scale[t]
 
         return beta
 
@@ -92,7 +120,7 @@ class HMM:
         #
         # return gamma_numerator/gamma_denominator
 
-    def calc_gamma(self, alpha, beta, updateA=False):
+    def calc_gamma(self, alpha, beta, scale, updateA=False):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ)
@@ -106,9 +134,9 @@ class HMM:
         γ
         """
         if updateA:
-            gamma_numerator = alpha[:-1] * beta[:-1]
+            gamma_numerator = alpha[:-1] * beta[:-1] / scale[:-1]
         else:
-            gamma_numerator = alpha * beta
+            gamma_numerator = alpha * beta / scale
         return gamma_numerator
         # gamma_denominator = alpha[-1].sum()
         #
@@ -117,7 +145,7 @@ class HMM:
     def calc_psai(self, x, alpha, beta):
         """
         calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
-        ξ_t(i,j) = p(i_t = q_i, t_t+1 = q_j  | x, λ)
+        ξ_t(i,j) = p(i_t = q_i, i_t+1 = q_j  | x, λ)
 
         Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
         Parameters:
@@ -158,23 +186,26 @@ class HMM:
 
             # Step 1
             # forward and backward
-            alphas, betas = [], []
+            alphas, scales, betas = [], [], []
             for i_sample in range(n_samples):
-                alpha = self.forward(X[i_sample]) # T * M
-                beta = self.backward(X[i_sample]) # T * M
+                alpha, scale = self.forward(X[i_sample]) # T * M
+                beta = self.backward(X[i_sample], scale) # T * M
                 alphas.append(alpha)
                 betas.append(beta)
+                scales.append(scale)
                 # P[i_sample] is P(O|λ) when calculate gamma and psai
-                P[i_sample] = alpha[-1].sum()
+                # P(O|λ) = 1 / CT, CT = c1*c2*...*cT
+                P[i_sample] = 1 / reduce(lambda x,y:x*y, scale)#
+                # P[i_sample] =  np.log(scale).sum()
 
             # record costs
-            costs.append(np.sum(np.log(P)))
+            costs.append(np.sum(P))
 
             # Step 2
             # re-estimate pi, A, B
 
             # Step 2.1 re-estimate pi (mean value)
-            self.pi =  np.sum((alphas[i_sample][0] * betas[i_sample][0])/P[i_sample]  \
+            self.pi =  np.sum((alphas[i_sample][0] * betas[i_sample][0])/scales[i_sample][0]  \
                                 for i_sample in range(n_samples)) / n_samples
 
             # Step 2.2 re-estimate A, B
@@ -182,10 +213,10 @@ class HMM:
             for i_sample in range(n_samples):
                 # Step 2.2.1  update A
                 a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
-                a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], updateA=True) # T-1 * M
+                a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample], updateA=True) # T-1 * M
 
-                A_numerator = np.sum(a_psai, axis=0)/P[i_sample] # M*M
-                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T/P[i_sample] # M*1
+                A_numerator = np.sum(a_psai, axis=0)#/P[i_sample] # M*M
+                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T#/P[i_sample] # M*1
                 tmp_A.append(A_numerator/A_denominator)
 
                 # Step 2.2.1  update B
@@ -196,11 +227,11 @@ class HMM:
                         for t in range(T):
                             if X[i_sample][t] == k:
                                 B_gamma_numerator += self.calc_gamma_per_element(t,j,
-                                                                                 alphas[i_sample],betas[i_sample])
-                        B_numerator[j,k] = B_gamma_numerator/P[i_sample]
+                                                        alphas[i_sample],betas[i_sample])/scale[t]
+                        B_numerator[j,k] = B_gamma_numerator#/P[i_sample]
 
-                b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample]) # T * M
-                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T/P[i_sample]  # M*1
+                b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample]) # T * M
+                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T#/P[i_sample]  # M*1
                 tmp_B.append(B_numerator / B_denominator) # M*V
 
             self.A = np.mean(tmp_A,axis=0) # M*M
@@ -244,7 +275,12 @@ class HMM:
         return states
 
     def log_likelihood(self,X):
-        return np.log(np.array([self.forward(x)[-1].sum() for x in X]))
+        log_p = []
+        for x in X:
+            _, scale = self.forward(x)
+            p = 1 / reduce(lambda x,y:x*y, scale)
+            log_p.append(np.log(p))
+        return np.array(log_p)
 
     def generate(self, length):
         """
