@@ -22,7 +22,7 @@ def fit_coin():
     print(X.shape)
 
     hmm = HMM(2,2)
-    hmm.fit(X,max_iter=30)
+    hmm.fit(X,max_iter=50)
     L = hmm.log_likelihood(X).sum()
     print("LL with fitted params:", L)
 
