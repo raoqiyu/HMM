@@ -154,7 +154,7 @@ class HMM:
         #
         # return gamma_numerator/gamma_denominator
 
-    def calc_gamma(self, alpha, beta, scale, updateA=False):
+    def calc_gamma(self, alpha, beta, scale, px=None, updateA=False):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
         γ_t(i) = p(i_t = q_i | x, λ) = α_t(i) * β_t(i) / P(x|λ)
@@ -181,12 +181,13 @@ class HMM:
             gamma_numerator = alpha[:-1] * beta[:-1] / scale[:-1]
         else:
             gamma_numerator = alpha * beta / scale
-        return gamma_numerator
-        # gamma_denominator = alpha[-1].sum()
-        #
-        # return gamma_numerator/gamma_denominator
 
-    def calc_psai(self, x, alpha, beta):
+        # In scaled version, it need divide the scale factor instead of the gamma_denominator
+        gamma = np.sum(gamma_numerator, axis=0, keepdims=True).T
+
+        return gamma
+
+    def calc_psai(self, x, alpha, beta, px=None):
         """
         calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
         ξ_t(i,j) = p(i_t = q_i, i_t+1 = q_j  | x, λ)
@@ -217,8 +218,11 @@ class HMM:
             for i in range(self.M):
                 for j in range(self.M):
                     psai_numerator[t,i,j] = alpha[t,i] * self.A[i,j] * self.B[j,x[t+1]] * beta[t+1,j]
-        return psai_numerator
-        # return psai_numerator/psai_denominator
+
+        # In scaled version, it dose not need divide neither the scale factor nor the  psai_denominator
+        psai = np.sum(psai_numerator, axis=0)
+
+        return psai
 
     def fit(self, X, max_iter=10):
         """
@@ -266,13 +270,11 @@ class HMM:
             tmp_A, tmp_B = [],[]
             for i_sample in range(n_samples):
                 # Step 2.2.1  update A
-                a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
-                a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample], updateA=True) # T-1 * M
+                A_numerator_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample],px=P[i_sample]) # T-1 * M * M
+                A_denominator_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample],
+                                                       px=P[i_sample], updateA=True) # T-1 * M
 
-                # In scaled version, it dose not need divide the numerator
-                A_numerator = np.sum(a_psai, axis=0)#/P[i_sample] # M*M
-                A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T#/P[i_sample] # M*1
-                tmp_A.append(A_numerator/A_denominator)
+                tmp_A.append(A_numerator_psai/A_denominator_gamma)
 
                 # Step 2.2.1  update B
                 B_numerator = np.zeros((self.M,self.V)) # M * V
@@ -283,12 +285,13 @@ class HMM:
                             if X[i_sample][t] == k:
                                 B_gamma_numerator += self.calc_gamma_per_element(t,j,
                                                         alphas[i_sample],betas[i_sample], scales[i_sample])
+                        # In scaled version, it dose not need divide the numerator
                         B_numerator[j,k] = B_gamma_numerator#/P[i_sample]
 
-                b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample]) # T * M
-                # In scaled version, it dose not need divide the numerator
-                B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T#/P[i_sample]  # M*1
-                tmp_B.append(B_numerator / B_denominator) # M*V
+                B_denominator_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample],
+                                                      px=P[i_sample]) # T * M
+
+                tmp_B.append(B_numerator / B_denominator_gamma) # M*V
 
             self.A = np.mean(tmp_A,axis=0) # M*M
             self.B = np.mean(tmp_B, axis=0)  # M*V
