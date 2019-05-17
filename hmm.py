@@ -38,11 +38,34 @@ class HMM:
         α_t(i) = P(x1,x2,...xt,i_t=q_i | λ)
 
         scaled version:
-        α_t(i) = P(x1,x2,...xt) * p(i_t=q_i |x1,x2,...x_t,  λ) = scaled_factor * scaled_of_α_t(i)
-            scaled factor: P(x1,x2,...x_t) = sum(α_t(i)), i =1,2,3,...M
-            scaled α_t: p(i_t=q_i |x1,x2,...xt,  λ)
-                scaled α_t = α_t / scaled_factor
+            α_1(i) = P(x1,i_1=q_i | λ)
+        scaled α_1(i) = P(x1,i_1=q_i | λ)/sum(P(x1,i_1=q_i | λ), i=1,...M)
+        scaled factor c_1 = 1//sum(P(x1,i_1=q_i | λ)
 
+        scaled α_1(i) = α_1(i) * (scaled factor c_1)
+
+        scaled α_t(i) = sum( scaled_α_t-1(j) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_t)
+            scaled factor c_t = sum(sum( scaled_α_t-1(j) * A[j,i] * B[i,xt], j=1,..,M), i=1,..,M)
+
+        so
+            scaled α_1(i) = α_1(i) * (scaled factor c_1)
+            scaled α_2(i) = sum( scaled_α_1(j) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_2)
+                          = sum( α_1(i) * (scaled factor c_1) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_2)
+                          = sum( α_1(i) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_2) * (scaled factor c_1)
+                          = α_2(i) * (scaled factor c_2) * (scaled factor c_1)
+            scaled α_3(i) = sum( scaled_α_2(j) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_3)
+                          = sum(α_2(i) * (scaled factor c_2) * (scaled factor c_1) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_3)
+                          = sum(α_2(i) * A[j,i] * B[i,xt], j=1,..,M) * (scaled factor c_3) * (scaled factor c_2) * (scaled factor c_1)
+                          =  α_3(i) * (scaled factor c_3) * (scaled factor c_2) * (scaled factor c_1)
+
+            scaled α_t(i) = prod(c_j, j=1,..,t) * α_t(i)
+
+        1 = sum(scaled_α_T(i),i =1,...,M) = sum( prod(ct, t=1,..,T) * α_T(i)) = prod(ct, t=1,..,T) * sum(α_T(i),i=1,..,M)
+          = prod(ct, t=1,..,T) * P(x|λ)
+
+        P(x|λ) = 1 / prod(ct, t=1,..,T)
+
+        α_t(i)
         Parameters:
         x - observed sequence, np.array, T*1
         Returns:
@@ -71,21 +94,22 @@ class HMM:
 
 
         scaled version:
-        P(O|λ) = sum(α_t(i) * A[i,j] * B[j, Ot] * β_t=1(i)), i = 1,2,..,M, j = 1,2,...,M
-               = sum(scaled_α_t(i) * A[i,j] * B[j, Ot] * scaled_β_t+1(i)),
-               = sum( α_t(i)/scaled_factor_ α_t * A[i,j] * B[j, Ot] * β_t+1(i)*scale_factor_β_t+1 )
+        scaled βT(i) = cT * βT(i)
+        scaled βt(i) = sum( A[i,j] * B[j, xt+1] * scaled_βt+1(j), j=1,..,M)
+
 
         so,
-            scaled_factor_ α_t == scale_factor_β_t+1
+            scaled βT(i) = cT * βT(i)
+            scaled βT-1(i) = cT-1 * sum( A[i,j] * B[j, xt+1] * scaled_βT(j), j=1,..,M)
+                           = sum( A[i,j] * B[j, xt+1] * cT * βT(i), j=1,..,M)
+                           = cT-1 * cT * sum( A[i,j] * B[j, xt+1] * βT(i), j=1,..,M)
+                           = cT-1 * cT * βT-1(i)
+            scaled βT-2(i) = cT-2 * sum( A[i,j] * B[j, xt+1] * scaled_βT-1(j), j=1,..,M)
+                           = cT-2 * sum( A[i,j] * B[j, xt+1] * cT-1 * cT * βT-1(i), j=1,..,M)
+                           = cT-2 * cT-1 * cT * sum( A[i,j] * B[j, xt+1] * βT-1(i), j=1,..,M)
+                           = cT-2 * cT-1 * cT * βT-2(i)
 
-
-        β_t(i) = scaled_of_α_t(i) / scaled_factor
-
-        β_t(i) = P(x_t+1,x_t+2,...x_T|λ,x1,x2,...,xt,i_t=q_i ) * p(x1,x2,...,xt)
-               = scaled_factor * scaled_of_β_t(i)
-            scaled factor: P(x1,x2,...xt) = sum(α_t(i)), i =1,2,3,...M
-            scaled α_t: p(i_t=q_i |x1,x2,...xt,  λ)
-            scaled α_t = α_t / scaled_factor
+            scaled β_t(i) = prod(c_j, j=t+1,..,T) * β_t(i)
 
         Parameters:
         x - observed sequence
@@ -101,12 +125,22 @@ class HMM:
 
         return beta
 
-    def calc_gamma_per_element(self, t, i, alpha, beta):
+    def calc_gamma_per_element(self, t, i, alpha, beta, scale):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
-        γ_t(i) = p(i_t = q_i | x, λ)
+        γ_t(i) = p(i_t = q_i | x, λ) = α_t(i) * β_t(i) / P(x|λ)
 
         Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
+
+        scaled version:
+            γ_t(i) = α_t(i) * β_t(i) / P(x|λ)
+                   = (scaled_α_t(i)/prod(c_j, j=1,..,t)) *  (scaled_ β_t(i)/prod(c_j, j=t+1,..,T)) / P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / prod(c_j, j=1,.t,t,+1.,T) * P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / ct * prod(c_j, j=1,.t,+1.,T) * P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / ct
+
+        so in scaled version, it need divide the scale factor instead of the gamma_denominator
+
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -114,7 +148,7 @@ class HMM:
         Returns:
         γ_t(i)
         """
-        gamma_numerator = alpha[t,i]*beta[t,i]
+        gamma_numerator = alpha[t,i]*beta[t,i]/scale[t]
         return  gamma_numerator
         # gamma_denominator = alpha[-1].sum()
         #
@@ -123,9 +157,19 @@ class HMM:
     def calc_gamma(self, alpha, beta, scale, updateA=False):
         """
         calculate probability of state qi at time t given model λ and  observed  sequence x
-        γ_t(i) = p(i_t = q_i | x, λ)
+        γ_t(i) = p(i_t = q_i | x, λ) = α_t(i) * β_t(i) / P(x|λ)
 
         Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
+
+        scaled version:
+            γ_t(i) = α_t(i) * β_t(i) / P(x|λ)
+                   = (scaled_α_t(i)/prod(c_j, j=1,..,t)) *  (scaled_ β_t(i)/prod(c_j, j=t,..,T)) / P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / prod(c_j, j=1,.t,t,+1.,T) * P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / ct * prod(c_j, j=1,.t,+1.,T) * P(x|λ)
+                   = (scaled_α_t(i) * scaled_β_t(i)) / ct
+
+        so in scaled version, it need divide the scale factor instead of the gamma_denominator
+
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -146,8 +190,18 @@ class HMM:
         """
         calculate probability of state qi at time t and state qj at time t+1 given model and  observed  sequence x
         ξ_t(i,j) = p(i_t = q_i, i_t+1 = q_j  | x, λ)
+                 = α_t(i) * A[i,j] * B[j, xt] * β_t+1(j) / P(x|λ)
 
         Note : P(X|λ) = sum(P(α_t(i)), i=1,2,...V, we can save time for calculating this
+
+        scaled version:
+            ξ_t(i,j) = α_t(i) * A[i,j] * B[j, xt] * β_t+1(j) / P(x|λ)
+                     = (scaled_α_t(i)/prod(c_j, j=1,..,t)) * A[i,j] * B[j, xt] * (scaled_ β_t+1(j)/prod(c_j, j=t+1,..,T))
+                     = scaled_α_t(i) * A[i,j] * B[j, xt] * scaled_β_t+1(j) / prod(c_j, j=1,..,T)) *  P(x|λ)
+                     = scaled_α_t(i) * A[i,j] * B[j, xt] * scaled_β_t+1(j)
+
+        so in scaled version , it dose not need divide neither the scale factor nor the  psai_denominator
+
         Parameters:
         x - observed sequence
         alpha - forward probability
@@ -215,6 +269,7 @@ class HMM:
                 a_psai = self.calc_psai(X[i_sample], alphas[i_sample], betas[i_sample]) # T-1 * M * M
                 a_gamma  = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample], updateA=True) # T-1 * M
 
+                # In scaled version, it dose not need divide the numerator
                 A_numerator = np.sum(a_psai, axis=0)#/P[i_sample] # M*M
                 A_denominator = np.sum(a_gamma, axis=0, keepdims=True).T#/P[i_sample] # M*1
                 tmp_A.append(A_numerator/A_denominator)
@@ -227,10 +282,11 @@ class HMM:
                         for t in range(T):
                             if X[i_sample][t] == k:
                                 B_gamma_numerator += self.calc_gamma_per_element(t,j,
-                                                        alphas[i_sample],betas[i_sample])/scale[t]
+                                                        alphas[i_sample],betas[i_sample], scales[i_sample])
                         B_numerator[j,k] = B_gamma_numerator#/P[i_sample]
 
                 b_gamma = self.calc_gamma(alphas[i_sample],betas[i_sample], scales[i_sample]) # T * M
+                # In scaled version, it dose not need divide the numerator
                 B_denominator = np.sum(b_gamma, axis=0, keepdims=True).T#/P[i_sample]  # M*1
                 tmp_B.append(B_numerator / B_denominator) # M*V
 
